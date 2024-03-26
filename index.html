@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blockchain Transaktionsvisualisierung</title>
+    <script src="https://unpkg.com/cytoscape@3.10.1/dist/cytoscape.min.js"></script>
+    <style>    
+        body {
+            background-color: #FFFF00; 
+        }
+        #cy {
+            position: absolute;
+            left: 0;
+            top: 20%;
+            bottom: 0;
+            right: 0;
+            z-index: 999;
+        }
+        #info {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            z-index: 1000;
+            padding: 10px;
+            background-color: #000000;
+            color: #00FFFF;
+        }
+        #loading {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Namada transaction graph by WayneWayner</h1>
+    <input type="text" id="address" placeholder="tnam1qprjrep83l475nkppltdyu6sx235e96gr5xfkafp">
+    <button onclick="loadTransactions(document.getElementById('address').value)">Load</button>
+    <button onclick="clearGraph()">Clear</button>
+    <div id="info"></div>
+    <div id="cy"></div>
+    <div id="loading">Loading...</div>
+    <script>
+        var cy = cytoscape({
+            container: document.getElementById('cy'),
+            layout: {
+                name: 'breadthfirst',
+                directed: true,
+                padding: 10
+            },
+            elements: [],
+            
+            style: [
+            {
+            selector: 'node',
+            style: {
+                'background-image': 'https://pbs.twimg.com/profile_images/1679825110373486593/oVAMywcF_400x400.jpg',
+                'background-fit': 'contain',
+                'label': 'data(id)'
+                }
+            },
+            {
+                selector: 'edge[label = "IN"]',
+                style: {
+                    'curve-style': 'bezier',
+                    'target-arrow-shape': 'triangle',
+                    'line-color': 'green',
+                    'target-arrow-color': 'green',
+                    'label': 'data(label)'
+                    }
+                },
+                {
+                selector: 'edge[label = "OUT"]',
+                style: {
+                    'curve-style': 'bezier',
+                    'target-arrow-shape': 'triangle',
+                    'line-color': 'red',
+                    'target-arrow-color': 'red',
+                    'label': 'data(label)'
+                    }
+                }
+            ],
+    
+        });
+
+        cy.on('tap', 'node', function(evt){
+            var node = evt.target;
+            var address = node.data('id');
+            console.log(address);
+            loadTransactions(address);
+        });
+
+        cy.on('tap', 'edge', function(evt){
+            var edge = evt.target;
+            var data = edge.data();
+            var info = document.getElementById('info');
+            info.innerHTML = '';
+            for (var key in data.transaction) {
+                var value = data.transaction[key];
+                if (typeof value === 'object') {
+                    value = JSON.stringify(value, null, 2);
+                }
+                var text = document.createTextNode(key + ': ' + value);
+                var p = document.createElement('p');
+                p.appendChild(text);
+                info.appendChild(p);
+            }
+        });
+        
+
+
+        function loadTransactions(address) {
+            var loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            fetch('https://indexer.namada.waynewayner.de/address/' + address)
+                .then(response => response.json())
+                .then(transactions => {
+                    var elements = transactions.flatMap(function(transaction) {
+                        var label = transaction.data.target === address ? 'IN' : 'OUT';
+                        return [
+                            { data: { id: transaction.data.source } },
+                            { data: { id: transaction.data.target } },
+                            {
+                                data: {
+                                    id: transaction.hash,
+                                    source: transaction.data.source,
+                                    target: transaction.data.target,
+                                    label: label,
+                                    transaction: transaction
+                                }
+                            }
+                        ];
+                    });
+                    elements.forEach(function(element) {
+                        if (cy.getElementById(element.data.id).length === 0) {
+                            cy.add(element);
+                        }
+                    });
+                    cy.layout({
+                        name: 'breadthfirst',
+                        directed: true,
+                        padding: 10
+                    }).run();
+                    loading.style.display = 'none';
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function clearGraph(){
+            cy.elements().remove();
+        }
+        function init(){
+            loadTransactions("tnam1qprjrep83l475nkppltdyu6sx235e96gr5xfkafp");
+        }
+        window.onload = init;
+    </script>
+</body>
+</html>
